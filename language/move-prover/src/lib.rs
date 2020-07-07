@@ -127,6 +127,8 @@ pub fn run_move_prover<W: WriteColor>(
         if env.has_errors() {
             env.report_errors(error_writer);
             return Err(anyhow!("exiting with boogie verification errors"));
+        } else {
+            info!("Move prover found no errors :)");
         }
     }
     Ok(())
