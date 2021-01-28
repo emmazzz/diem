@@ -221,6 +221,11 @@ impl DiemVMImpl {
         let txn_max_gas_units = txn_data.max_gas_amount().get();
         let txn_expiration_timestamp_secs = txn_data.expiration_timestamp_secs();
         let chain_id = txn_data.chain_id();
+        let secondary_key_preimages: Vec<MoveValue> = txn_data
+            .secondary_authentication_key_preimages
+            .iter()
+            .map(|preimage| MoveValue::vector_u8(preimage.to_vec()))
+            .collect();
         session
             .execute_function(
                 &account_config::ACCOUNT_MODULE,
@@ -230,6 +235,8 @@ impl DiemVMImpl {
                     MoveValue::Signer(txn_data.sender),
                     MoveValue::U64(txn_sequence_number),
                     MoveValue::vector_u8(txn_public_key),
+                    MoveValue::vector_address(txn_data.secondary_signers()),
+                    MoveValue::Vector(secondary_key_preimages),
                     MoveValue::U64(txn_gas_price),
                     MoveValue::U64(txn_max_gas_units),
                     MoveValue::U64(txn_expiration_timestamp_secs),

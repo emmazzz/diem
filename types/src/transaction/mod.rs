@@ -10,7 +10,7 @@ use crate::{
     contract_event::ContractEvent,
     ledger_info::LedgerInfo,
     proof::{accumulator::InMemoryAccumulator, TransactionInfoWithProof, TransactionListProof},
-    transaction::authenticator::TransactionAuthenticator,
+    transaction::authenticator::{AccountAuthenticator, TransactionAuthenticator},
     vm_status::{DiscardedVMStatus, KeptVMStatus, StatusCode, StatusType, VMStatus},
     write_set::WriteSet,
 };
@@ -61,6 +61,9 @@ pub struct RawTransaction {
     /// Sender's address.
     sender: AccountAddress,
 
+    /// Secondary participants of the transaction.
+    secondary_signers: Vec<AccountAddress>,
+
     /// Sequence number of this transaction. This must match the sequence number
     /// stored in the sender's account at the time the transaction executes.
     sequence_number: u64,
@@ -107,6 +110,35 @@ impl RawTransaction {
         RawTransaction {
             sender,
             sequence_number,
+            secondary_signers: vec![],
+            payload,
+            max_gas_amount,
+            gas_unit_price,
+            gas_currency_code,
+            expiration_timestamp_secs,
+            chain_id,
+        }
+    }
+
+    /// Create a new multi-agent `RawTransaction` with a payload.
+    ///
+    /// It can be either to publish a module, to execute a script, or to issue a writeset
+    /// transaction.
+    pub fn new_multi_agent(
+        sender: AccountAddress,
+        secondary_signers: Vec<AccountAddress>,
+        sequence_number: u64,
+        payload: TransactionPayload,
+        max_gas_amount: u64,
+        gas_unit_price: u64,
+        gas_currency_code: String,
+        expiration_timestamp_secs: u64,
+        chain_id: ChainId,
+    ) -> Self {
+        RawTransaction {
+            sender,
+            sequence_number,
+            secondary_signers,
             payload,
             max_gas_amount,
             gas_unit_price,
@@ -131,6 +163,7 @@ impl RawTransaction {
     ) -> Self {
         RawTransaction {
             sender,
+            secondary_signers: vec![],
             sequence_number,
             payload: TransactionPayload::Script(script),
             max_gas_amount,
@@ -157,6 +190,7 @@ impl RawTransaction {
     ) -> Self {
         RawTransaction {
             sender,
+            secondary_signers: vec![],
             sequence_number,
             payload: TransactionPayload::Module(module),
             max_gas_amount,
@@ -189,6 +223,7 @@ impl RawTransaction {
     ) -> Self {
         RawTransaction {
             sender,
+            secondary_signers: vec![],
             sequence_number,
             payload: TransactionPayload::WriteSet(WriteSetPayload::Direct(change_set)),
             // Since write-set transactions bypass the VM, these fields aren't relevant.
@@ -210,6 +245,7 @@ impl RawTransaction {
     ) -> Self {
         RawTransaction {
             sender,
+            secondary_signers: vec![],
             sequence_number,
             payload: TransactionPayload::WriteSet(WriteSetPayload::Script {
                 execute_as: signer,
@@ -236,8 +272,54 @@ impl RawTransaction {
     ) -> Result<SignatureCheckedTransaction> {
         let signature = private_key.sign(&self);
         Ok(SignatureCheckedTransaction(SignedTransaction::new(
-            self, public_key, signature,
+            self,
+            AccountAuthenticator::ed25519(public_key, signature),
         )))
+    }
+
+    /// Signs the given multi-agent `RawTransactions`, which are transactions with secondary
+    /// signers in addition to a sender. The private keys of the sender and the
+    /// secondary signers are used to sign the transaction.
+    ///
+    /// The order and length of the secondary keys provided here have to match the order and
+    /// length of the `secondary_signers` field of the `RawTransaction`.
+    pub fn sign_multi_agent(
+        self,
+        sender_private_key: &Ed25519PrivateKey,
+        sender_public_key: Ed25519PublicKey,
+        secondary_private_keys: Vec<&Ed25519PrivateKey>,
+        secondary_public_keys: Vec<Ed25519PublicKey>,
+    ) -> Result<SignatureCheckedTransaction> {
+        let sender_signature = sender_private_key.sign(&self);
+        let sender_authenticator =
+            AccountAuthenticator::ed25519(sender_public_key, sender_signature);
+
+        let num_secondary_signers = self.secondary_signers.len();
+        if secondary_public_keys.len() != num_secondary_signers {
+            return Err(format_err!(
+                "number of secondary public keys and number of secondary signers don't match"
+            ));
+        }
+        if secondary_private_keys.len() != num_secondary_signers {
+            return Err(format_err!(
+                "number of secondary private keys and number of secondary signers don't match"
+            ));
+        }
+        let mut secondary_authenticators = vec![];
+        for i in 0..num_secondary_signers {
+            let signature = secondary_private_keys[i].sign(&self);
+            secondary_authenticators.push(AccountAuthenticator::ed25519(
+                secondary_public_keys[i].clone(),
+                signature,
+            ));
+        }
+        Ok(SignatureCheckedTransaction(
+            SignedTransaction::new_multi_agent(
+                self,
+                sender_authenticator,
+                secondary_authenticators,
+            ),
+        ))
     }
 
     #[cfg(any(test, feature = "fuzzing"))]
@@ -247,9 +329,10 @@ impl RawTransaction {
         public_key: Ed25519PublicKey,
     ) -> Result<SignatureCheckedTransaction> {
         let signature = private_key.sign(&self);
-        Ok(SignatureCheckedTransaction(
-            SignedTransaction::new_multisig(self, public_key.into(), signature.into()),
-        ))
+        Ok(SignatureCheckedTransaction(SignedTransaction::new(
+            self,
+            AccountAuthenticator::multi_ed25519(public_key.into(), signature.into()),
+        )))
     }
 
     pub fn into_payload(self) -> TransactionPayload {
@@ -265,6 +348,10 @@ impl RawTransaction {
             }
             TransactionPayload::Module(_) => ("module publishing".to_string(), &empty_vec[..]),
         };
+        let mut sec_signers: String = "".to_string();
+        for sec_signer in &self.secondary_signers {
+            sec_signers = format!("{}\n\t\t\t{:#?},", sec_signers, sec_signer);
+        }
         let mut f_args: String = "".to_string();
         for arg in args {
             f_args = format!("{}\n\t\t\t{:#?},", f_args, arg);
@@ -272,6 +359,7 @@ impl RawTransaction {
         format!(
             "RawTransaction {{ \n\
              \tsender: {}, \n\
+             \tsecondary_signers: {}, \n\
              \tsequence_number: {}, \n\
              \tpayload: {{, \n\
              \t\ttransaction: {}, \n\
@@ -285,6 +373,7 @@ impl RawTransaction {
              \tchain_id: {},
              }}",
             self.sender,
+            sec_signers,
             self.sequence_number,
             code,
             f_args,
@@ -401,15 +490,23 @@ impl fmt::Debug for SignedTransaction {
 }
 
 impl SignedTransaction {
-    pub fn new(
-        raw_txn: RawTransaction,
-        public_key: Ed25519PublicKey,
-        signature: Ed25519Signature,
-    ) -> SignedTransaction {
-        let authenticator = TransactionAuthenticator::ed25519(public_key, signature);
+    pub fn new(raw_txn: RawTransaction, sender: AccountAuthenticator) -> Self {
+        // ensure!(raw_txn.secondary_signers.is_empty(), "single agent transactions cannot have secondary signers");
+
         SignedTransaction {
             raw_txn,
-            authenticator,
+            authenticator: TransactionAuthenticator::new_single_agent(sender),
+        }
+    }
+
+    pub fn new_multi_agent(
+        raw_txn: RawTransaction,
+        sender: AccountAuthenticator,
+        secondary_signers: Vec<AccountAuthenticator>,
+    ) -> Self {
+        SignedTransaction {
+            raw_txn,
+            authenticator: TransactionAuthenticator::new_multi_agent(sender, secondary_signers),
         }
     }
 
@@ -418,10 +515,10 @@ impl SignedTransaction {
         public_key: MultiEd25519PublicKey,
         signature: MultiEd25519Signature,
     ) -> SignedTransaction {
-        let authenticator = TransactionAuthenticator::multi_ed25519(public_key, signature);
+        let account_authenticator = AccountAuthenticator::multi_ed25519(public_key, signature);
         SignedTransaction {
             raw_txn,
-            authenticator,
+            authenticator: TransactionAuthenticator::new_single_agent(account_authenticator),
         }
     }
 
@@ -431,6 +528,10 @@ impl SignedTransaction {
 
     pub fn sender(&self) -> AccountAddress {
         self.raw_txn.sender
+    }
+
+    pub fn secondary_signers(&self) -> Vec<AccountAddress> {
+        self.raw_txn.secondary_signers.to_vec()
     }
 
     pub fn into_raw_transaction(self) -> RawTransaction {

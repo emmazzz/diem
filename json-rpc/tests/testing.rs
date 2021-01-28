@@ -11,7 +11,7 @@ use diem_types::{
         xus_tag, XUS_NAME,
     },
     chain_id::ChainId,
-    transaction::SignedTransaction,
+    transaction::{authenticator::AccountAuthenticator, SignedTransaction},
 };
 use serde_json::{json, Value};
 
@@ -345,8 +345,10 @@ impl diem_types::transaction::helpers::TransactionSigner for Account {
         let signature = self.private_key.sign(&raw_txn);
         Ok(SignedTransaction::new(
             raw_txn,
-            diem_crypto::ed25519::Ed25519PublicKey::from(&self.private_key),
-            signature,
+            AccountAuthenticator::ed25519(
+                diem_crypto::ed25519::Ed25519PublicKey::from(&self.private_key),
+                signature,
+            ),
         ))
     }
 }

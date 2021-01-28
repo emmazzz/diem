@@ -10,7 +10,9 @@ use diem_network_address_encryption::Encryptor;
 use diem_secure_storage::{CryptoStorage, KVStorage, Storage};
 use diem_types::{
     account_address::AccountAddress,
-    transaction::{RawTransaction, SignedTransaction, Transaction},
+    transaction::{
+        authenticator::AccountAuthenticator, RawTransaction, SignedTransaction, Transaction,
+    },
     waypoint::Waypoint,
 };
 use serde::{de::DeserializeOwned, Serialize};
@@ -128,8 +130,7 @@ impl StorageWrapper {
 
         Ok(SignedTransaction::new(
             raw_transaction,
-            public_key,
-            signature,
+            AccountAuthenticator::ed25519(public_key, signature),
         ))
     }
 
@@ -150,8 +151,7 @@ impl StorageWrapper {
 
         Ok(SignedTransaction::new(
             raw_transaction,
-            key_version,
-            signature,
+            AccountAuthenticator::ed25519(key_version, signature),
         ))
     }
 }

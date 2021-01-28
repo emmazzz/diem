@@ -4,7 +4,9 @@
 use crate::{
     account_address::AccountAddress,
     chain_id::ChainId,
-    transaction::{RawTransaction, SignedTransaction, TransactionPayload},
+    transaction::{
+        authenticator::AccountAuthenticator, RawTransaction, SignedTransaction, TransactionPayload,
+    },
 };
 use anyhow::Result;
 use chrono::Utc;
@@ -66,8 +68,7 @@ impl TransactionSigner for KeyPair<Ed25519PrivateKey, Ed25519PublicKey> {
         let signature = self.private_key.sign(&raw_txn);
         Ok(SignedTransaction::new(
             raw_txn,
-            self.public_key.clone(),
-            signature,
+            AccountAuthenticator::ed25519(self.public_key.clone(), signature),
         ))
     }
 }

@@ -779,6 +779,15 @@ important to the semantics of the system.
 
 
 
+<a name="0x1_DiemAccount_PROLOGUE_ESECONDARY_KEYS_ADDRESSES_COUNT_MISMATCH"></a>
+
+
+
+<pre><code><b>const</b> <a href="DiemAccount.md#0x1_DiemAccount_PROLOGUE_ESECONDARY_KEYS_ADDRESSES_COUNT_MISMATCH">PROLOGUE_ESECONDARY_KEYS_ADDRESSES_COUNT_MISMATCH</a>: u64 = 1013;
+</code></pre>
+
+
+
 <a name="0x1_DiemAccount_PROLOGUE_ESEQUENCE_NUMBER_TOO_BIG"></a>
 
 
@@ -3475,6 +3484,8 @@ The prologue for module transaction
         sender,
         txn_sequence_number,
         txn_public_key,
+        <a href="Vector.md#0x1_Vector_empty">Vector::empty</a>(),
+        <a href="Vector.md#0x1_Vector_empty">Vector::empty</a>(),
         txn_gas_price,
         txn_max_gas_units,
         txn_expiration_time,
@@ -3560,7 +3571,7 @@ Covered: L75 (Match 9)
 The prologue for script transaction
 
 
-<pre><code><b>fun</b> <a href="DiemAccount.md#0x1_DiemAccount_script_prologue">script_prologue</a>&lt;Token&gt;(sender: &signer, txn_sequence_number: u64, txn_public_key: vector&lt;u8&gt;, txn_gas_price: u64, txn_max_gas_units: u64, txn_expiration_time: u64, chain_id: u8, script_hash: vector&lt;u8&gt;)
+<pre><code><b>fun</b> <a href="DiemAccount.md#0x1_DiemAccount_script_prologue">script_prologue</a>&lt;Token&gt;(sender: &signer, txn_sequence_number: u64, txn_public_key: vector&lt;u8&gt;, secondary_addresses: vector&lt;address&gt;, secondary_public_keys: vector&lt;vector&lt;u8&gt;&gt;, txn_gas_price: u64, txn_max_gas_units: u64, txn_expiration_time: u64, chain_id: u8, script_hash: vector&lt;u8&gt;)
 </code></pre>
 
 
@@ -3573,6 +3584,8 @@ The prologue for script transaction
     sender: &signer,
     txn_sequence_number: u64,
     txn_public_key: vector&lt;u8&gt;,
+    secondary_addresses: vector&lt;address&gt;,
+    secondary_public_keys: vector&lt;vector&lt;u8&gt;&gt;,
     txn_gas_price: u64,
     txn_max_gas_units: u64,
     txn_expiration_time: u64,
@@ -3588,6 +3601,8 @@ The prologue for script transaction
         sender,
         txn_sequence_number,
         txn_public_key,
+        secondary_addresses,
+        secondary_public_keys,
         txn_gas_price,
         txn_max_gas_units,
         txn_expiration_time,
@@ -3694,6 +3709,8 @@ The prologue for WriteSet transaction
         sender,
         txn_sequence_number,
         txn_public_key,
+        <a href="Vector.md#0x1_Vector_empty">Vector::empty</a>(),
+        <a href="Vector.md#0x1_Vector_empty">Vector::empty</a>(),
         0,
         0,
         txn_expiration_time,
@@ -3771,7 +3788,7 @@ The main properties that it verifies:
 - That the sequence number matches the transaction's sequence key
 
 
-<pre><code><b>fun</b> <a href="DiemAccount.md#0x1_DiemAccount_prologue_common">prologue_common</a>&lt;Token&gt;(sender: &signer, txn_sequence_number: u64, txn_public_key: vector&lt;u8&gt;, txn_gas_price: u64, txn_max_gas_units: u64, txn_expiration_time_seconds: u64, chain_id: u8)
+<pre><code><b>fun</b> <a href="DiemAccount.md#0x1_DiemAccount_prologue_common">prologue_common</a>&lt;Token&gt;(sender: &signer, txn_sequence_number: u64, txn_public_key: vector&lt;u8&gt;, secondary_addresses: vector&lt;address&gt;, secondary_public_keys: vector&lt;vector&lt;u8&gt;&gt;, txn_gas_price: u64, txn_max_gas_units: u64, txn_expiration_time_seconds: u64, chain_id: u8)
 </code></pre>
 
 
@@ -3784,6 +3801,8 @@ The main properties that it verifies:
     sender: &signer,
     txn_sequence_number: u64,
     txn_public_key: vector&lt;u8&gt;,
+    secondary_addresses: vector&lt;address&gt;,
+    secondary_public_keys: vector&lt;vector&lt;u8&gt;&gt;,
     txn_gas_price: u64,
     txn_max_gas_units: u64,
     txn_expiration_time_seconds: u64,
@@ -3811,6 +3830,24 @@ The main properties that it verifies:
         <a href="Hash.md#0x1_Hash_sha3_256">Hash::sha3_256</a>(txn_public_key) == *&sender_account.authentication_key,
         <a href="Errors.md#0x1_Errors_invalid_argument">Errors::invalid_argument</a>(<a href="DiemAccount.md#0x1_DiemAccount_PROLOGUE_EINVALID_ACCOUNT_AUTH_KEY">PROLOGUE_EINVALID_ACCOUNT_AUTH_KEY</a>),
     );
+
+
+    <b>let</b> num_secondary_signers = <a href="Vector.md#0x1_Vector_length">Vector::length</a>(&secondary_addresses);
+    <b>assert</b>(
+        <a href="Vector.md#0x1_Vector_length">Vector::length</a>(&secondary_public_keys) == num_secondary_signers,
+        <a href="Errors.md#0x1_Errors_invalid_argument">Errors::invalid_argument</a>(<a href="DiemAccount.md#0x1_DiemAccount_PROLOGUE_ESECONDARY_KEYS_ADDRESSES_COUNT_MISMATCH">PROLOGUE_ESECONDARY_KEYS_ADDRESSES_COUNT_MISMATCH</a>),
+    );
+
+    <b>let</b> i = 0;
+    <b>while</b> (i &lt; num_secondary_signers) {
+        <b>let</b> signer_account = borrow_global&lt;<a href="DiemAccount.md#0x1_DiemAccount">DiemAccount</a>&gt;(*<a href="Vector.md#0x1_Vector_borrow">Vector::borrow</a>(&secondary_addresses, i));
+        <b>let</b> signer_public_key = *<a href="Vector.md#0x1_Vector_borrow">Vector::borrow</a>(&secondary_public_keys, i);
+        <b>assert</b>(
+            <a href="Hash.md#0x1_Hash_sha3_256">Hash::sha3_256</a>(signer_public_key) == *&signer_account.authentication_key,
+            <a href="Errors.md#0x1_Errors_invalid_argument">Errors::invalid_argument</a>(<a href="DiemAccount.md#0x1_DiemAccount_PROLOGUE_EINVALID_ACCOUNT_AUTH_KEY">PROLOGUE_EINVALID_ACCOUNT_AUTH_KEY</a>),
+        );
+        i = i + 1;
+    };
 
     // [PCA5]: Check that the max transaction fee does not overflow a u64 value.
     <b>assert</b>(

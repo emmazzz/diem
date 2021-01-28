@@ -10,8 +10,8 @@ use diem_crypto::{
 use diem_types::{
     chain_id::ChainId,
     transaction::{
-        authenticator::AuthenticationKey, RawTransaction, SignedTransaction, Transaction,
-        TransactionPayload,
+        authenticator::{AccountAuthenticator, AuthenticationKey},
+        RawTransaction, SignedTransaction, Transaction, TransactionPayload,
     },
 };
 use rand::{prelude::StdRng, SeedableRng};
@@ -277,7 +277,10 @@ fn generate_signed_txn(request: GenerateSignedTxnRequest) -> GenerateSignedTxnRe
             ))
         })
         .unwrap();
-    let signed_txn = SignedTransaction::new(raw_txn, public_key, signature);
+    let signed_txn = SignedTransaction::new(
+        raw_txn,
+        AccountAuthenticator::ed25519(public_key, signature),
+    );
     let txn_hash = CryptoHash::hash(&Transaction::UserTransaction(signed_txn.clone())).to_hex();
     let signed_txn = hex::encode(
         bcs::to_bytes(&signed_txn)

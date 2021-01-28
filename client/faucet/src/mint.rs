@@ -4,9 +4,12 @@
 use anyhow::Result;
 use diem_client::{Client, MethodRequest};
 use diem_crypto::traits::SigningKey;
-use diem_types::account_config::{
-    testnet_dd_account_address, treasury_compliance_account_address, type_tag_for_currency_code,
-    XUS_NAME,
+use diem_types::{
+    account_config::{
+        testnet_dd_account_address, treasury_compliance_account_address,
+        type_tag_for_currency_code, XUS_NAME,
+    },
+    transaction::authenticator::AccountAuthenticator,
 };
 use std::{convert::From, fmt};
 
@@ -219,8 +222,10 @@ impl diem_types::transaction::helpers::TransactionSigner for Service {
         let signature = self.private_key.sign(&raw_txn);
         Ok(diem_types::transaction::SignedTransaction::new(
             raw_txn,
-            diem_crypto::ed25519::Ed25519PublicKey::from(&self.private_key),
-            signature,
+            AccountAuthenticator::ed25519(
+                diem_crypto::ed25519::Ed25519PublicKey::from(&self.private_key),
+                signature,
+            ),
         ))
     }
 }

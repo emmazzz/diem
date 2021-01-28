@@ -169,6 +169,8 @@ impl DiemVM {
 
         // Run the execution logic
         {
+            let mut senders = vec![txn_data.sender()];
+            senders.extend(txn_data.secondary_signers());
             cost_strategy
                 .charge_intrinsic_gas(txn_data.transaction_size())
                 .map_err(|e| e.into_vm_status())?;
@@ -177,7 +179,7 @@ impl DiemVM {
                     script.code().to_vec(),
                     script.ty_args().to_vec(),
                     convert_txn_args(script.args()),
-                    vec![txn_data.sender()],
+                    senders,
                     cost_strategy,
                     log_context,
                 )

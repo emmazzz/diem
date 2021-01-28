@@ -563,6 +563,10 @@ pub enum TransactionDataView {
         signature_scheme: String,
         signature: BytesView,
         public_key: BytesView,
+        secondary_signers: Vec<BytesView>,
+        secondary_signature_schemes: Vec<String>,
+        secondary_signatures: Vec<BytesView>,
+        secondary_public_keys: Vec<BytesView>,
         sequence_number: u64,
         chain_id: u8,
         max_gas_amount: u64,
@@ -647,9 +651,32 @@ impl From<Transaction> for TransactionDataView {
 
                 TransactionDataView::UserTransaction {
                     sender: t.sender().into(),
-                    signature_scheme: t.authenticator().scheme().to_string(),
-                    signature: t.authenticator().signature_bytes().into(),
-                    public_key: t.authenticator().public_key_bytes().into(),
+                    signature_scheme: t.authenticator().sender().scheme().to_string(),
+                    signature: t.authenticator().sender().signature_bytes().into(),
+                    public_key: t.authenticator().sender().public_key_bytes().into(),
+                    secondary_signers: t
+                        .secondary_signers()
+                        .iter()
+                        .map(|signer| signer.into())
+                        .collect(),
+                    secondary_signature_schemes: t
+                        .authenticator()
+                        .secondary_signers()
+                        .iter()
+                        .map(|account_auth| account_auth.scheme().to_string())
+                        .collect(),
+                    secondary_signatures: t
+                        .authenticator()
+                        .secondary_signers()
+                        .iter()
+                        .map(|account_auth| account_auth.signature_bytes().into())
+                        .collect(),
+                    secondary_public_keys: t
+                        .authenticator()
+                        .secondary_signers()
+                        .iter()
+                        .map(|account_auth| account_auth.public_key_bytes().into())
+                        .collect(),
                     sequence_number: t.sequence_number(),
                     chain_id: t.chain_id().id(),
                     max_gas_amount: t.max_gas_amount(),

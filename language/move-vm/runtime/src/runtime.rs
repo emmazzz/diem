@@ -133,6 +133,11 @@ impl VMRuntime {
 
     fn deserialize_args(&self, tys: &[Type], args: Vec<Vec<u8>>) -> PartialVMResult<Vec<Value>> {
         if tys.len() != args.len() {
+            println!(
+                "argument length mismatch: expected {} got {}",
+                tys.len(),
+                args.len()
+            );
             return Err(
                 PartialVMError::new(StatusCode::NUMBER_OF_ARGUMENTS_MISMATCH).with_message(
                     format!(

@@ -375,7 +375,7 @@ fn create_test_cases() -> Vec<Test> {
                             "script_hash": script_hash,
                             "sender": format!("{:#x}", &sender.address),
                             "sequence_number": 0,
-                            "signature": hex::encode(txn.authenticator().signature_bytes()),
+                            "signature": hex::encode(txn.authenticator().sender().signature_bytes()),
                             "signature_scheme": "Scheme::Ed25519",
                             "type": "user"
                         },

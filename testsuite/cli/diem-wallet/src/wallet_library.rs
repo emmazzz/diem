@@ -22,8 +22,9 @@ use diem_crypto::ed25519::Ed25519PrivateKey;
 use diem_types::{
     account_address::AccountAddress,
     transaction::{
-        authenticator::AuthenticationKey, helpers::TransactionSigner, RawTransaction,
-        SignedTransaction,
+        authenticator::{AccountAuthenticator, AuthenticationKey},
+        helpers::TransactionSigner,
+        RawTransaction, SignedTransaction,
     },
 };
 use rand::{rngs::OsRng, Rng};
@@ -164,8 +165,7 @@ impl WalletLibrary {
             let signature = child_key.sign(&txn);
             Ok(SignedTransaction::new(
                 txn,
-                child_key.get_public(),
-                signature,
+                AccountAuthenticator::ed25519(child_key.get_public(), signature),
             ))
         } else {
             Err(WalletError::DiemWalletGeneric(

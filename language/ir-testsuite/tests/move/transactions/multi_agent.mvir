@@ -1,0 +1,22 @@
+//! new-transaction
+//! account: alice
+//! account: bob
+//! sender: alice
+//! secondary-signers: bob
+//! args: 10
+import 0x1.DiemAccount;
+import 0x1.Signer;
+import 0x1.XUS;
+
+main(alice: &signer, bob: &signer, amount: u64) {
+    let alice_withdrawal_cap: DiemAccount.WithdrawCapability;
+    let bob_addr: address;
+
+    alice_withdrawal_cap = DiemAccount.extract_withdraw_capability(move(alice));
+    bob_addr = Signer.address_of(move(bob));
+    DiemAccount.pay_from<XUS.XUS>(
+        &alice_withdrawal_cap, move(bob_addr), move(amount), h"", h""
+    );
+    DiemAccount.restore_withdraw_capability(move(alice_withdrawal_cap));
+    return;
+}

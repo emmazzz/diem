@@ -1,7 +1,10 @@
 // Copyright (c) The Diem Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::account_address::AccountAddress;
+use crate::{
+    account_address::AccountAddress,
+    transaction::authenticator::TransactionAuthenticator::SingleAgent,
+};
 use anyhow::{ensure, Error, Result};
 use diem_crypto::{
     ed25519::{Ed25519PublicKey, Ed25519Signature},
@@ -17,19 +20,116 @@ use rand::{rngs::OsRng, Rng};
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, fmt, str::FromStr};
 
-/// A `TransactionAuthenticator` is an an abstraction of a signature scheme. It must know:
+/// Each transaction submitted to the Diem blockchain contains a `TransactionAuthenticator`. During
+/// transaction execution, the executor will check if every `AccountAuthenticator`'s signature on
+/// the transaction hash is well-formed and whether the sha3 hash of the
+/// `AccountAuthenticator`'s `AuthenticationKeyPreimage` matches the `AuthenticationKey` stored
+/// under the participating signer's account address.
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub enum TransactionAuthenticator {
+    /// Single-agent transaction.
+    SingleAgent { sender: AccountAuthenticator },
+    /// Multi-agent transaction.
+    MultiAgent {
+        sender: AccountAuthenticator,
+        secondary_signers: Vec<AccountAuthenticator>,
+    },
+}
+
+impl TransactionAuthenticator {
+    pub fn new_single_agent(sender: AccountAuthenticator) -> Self {
+        Self::SingleAgent { sender }
+    }
+
+    pub fn new_multi_agent(
+        sender: AccountAuthenticator,
+        secondary_signers: Vec<AccountAuthenticator>,
+    ) -> Self {
+        Self::MultiAgent {
+            sender,
+            secondary_signers,
+        }
+    }
+
+    /// Return Ok if all AccountAuthenticator's public keys match their signatures, Err otherwise
+    pub fn verify<T: Serialize + CryptoHash>(&self, message: &T) -> Result<()> {
+        match self {
+            Self::SingleAgent { sender } => sender.verify(message),
+            Self::MultiAgent {
+                sender,
+                secondary_signers,
+            } => {
+                sender.verify(message)?;
+                for signer in secondary_signers {
+                    signer.verify(message)?;
+                }
+                Ok(())
+            }
+        }
+    }
+
+    pub fn sender(&self) -> AccountAuthenticator {
+        match self {
+            Self::SingleAgent { sender } => sender.clone(),
+            Self::MultiAgent {
+                sender,
+                secondary_signers: _,
+            } => sender.clone(),
+        }
+    }
+
+    pub fn secondary_signers(&self) -> Vec<AccountAuthenticator> {
+        match self {
+            Self::SingleAgent { sender } => vec![],
+            Self::MultiAgent {
+                sender: _,
+                secondary_signers,
+            } => secondary_signers.to_vec(),
+        }
+    }
+}
+
+impl fmt::Display for TransactionAuthenticator {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::SingleAgent { sender } => {
+                write!(
+                    f,
+                    "TransactionAuthenticator[scheme: SingleAgent, sender: {}]",
+                    self.sender()
+                )
+            }
+            Self::MultiAgent {
+                sender,
+                secondary_signers,
+            } => {
+                let mut sec_signers: String = "".to_string();
+                for sec_signer in self.secondary_signers() {
+                    sec_signers = format!("{}\n\t\t\t{:#?},", sec_signers, sec_signer);
+                }
+                write!(
+                    f,
+                    "TransactionAuthenticator[\n\
+                        \tscheme: MultiAgent, \n\
+                        \tsender: {}\n\
+                        \tsecondary signers: {}]",
+                    self.sender(),
+                    sec_signers,
+                )
+            }
+        }
+    }
+}
+
+/// An `AccountAuthenticator` is an an abstraction of a signature scheme. It must know:
 /// (1) How to check its signature against a message and public key
 /// (2) How to convert its public key into an `AuthenticationKeyPreimage` structured as
 /// (public_key | signaure_scheme_id).
 /// Each on-chain `DiemAccount` must store an `AuthenticationKey` (computed via a sha3 hash of an
 /// `AuthenticationKeyPreimage`).
-/// Each transaction submitted to the Diem blockchain contains a `TransactionAuthenticator`. During
-/// transaction execution, the executor will check if the `TransactionAuthenticator`'s signature on
-/// the transaction hash is well-formed (1) and whether the sha3 hash of the
-/// `TransactionAuthenticator`'s `AuthenticationKeyPreimage` matches the `AuthenticationKey` stored
-/// under the transaction's sender account address (2).
 
-// TODO: in the future, can tie these to the TransactionAuthenticator enum directly with https://github.com/rust-lang/rust/issues/60553
+// TODO: in the future, can tie these to the AccountAuthenticator enum directly with https://github.com/rust-lang/rust/issues/60553
 #[derive(Debug)]
 #[repr(u8)]
 pub enum Scheme {
@@ -49,7 +149,7 @@ impl fmt::Display for Scheme {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub enum TransactionAuthenticator {
+pub enum AccountAuthenticator {
     /// Single signature
     Ed25519 {
         public_key: Ed25519PublicKey,
@@ -63,7 +163,7 @@ pub enum TransactionAuthenticator {
     // ... add more schemes here
 }
 
-impl TransactionAuthenticator {
+impl AccountAuthenticator {
     /// Unique identifier for the signature scheme
     pub fn scheme(&self) -> Scheme {
         match self {
@@ -235,11 +335,11 @@ impl AuthenticationKeyPreimage {
     }
 }
 
-impl fmt::Display for TransactionAuthenticator {
+impl fmt::Display for AccountAuthenticator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "TransactionAuthenticator[scheme id: {:?}, public key: {}, signature: {}]",
+            "AccountAuthenticator[scheme id: {:?}, public key: {}, signature: {}]",
             self.scheme(),
             hex::encode(&self.public_key_bytes()),
             hex::encode(&self.signature_bytes())

@@ -6,8 +6,9 @@ use crate::{
     account_config::XUS_NAME,
     chain_id::ChainId,
     transaction::{
-        metadata, GovernanceRole, RawTransaction, Script, SignedTransaction, Transaction,
-        TransactionInfo, TransactionListWithProof, TransactionPayload, TransactionWithProof,
+        authenticator::AccountAuthenticator, metadata, GovernanceRole, RawTransaction, Script,
+        SignedTransaction, Transaction, TransactionInfo, TransactionListWithProof,
+        TransactionPayload, TransactionWithProof,
     },
 };
 use bcs::test_helpers::assert_canonical_encode_decode;
@@ -31,8 +32,10 @@ fn test_invalid_signature() {
             0,
             ChainId::test(),
         ),
-        Ed25519PrivateKey::generate_for_testing().public_key(),
-        Ed25519Signature::try_from(&[1u8; 64][..]).unwrap(),
+        AccountAuthenticator::ed25519(
+            Ed25519PrivateKey::generate_for_testing().public_key(),
+            Ed25519Signature::try_from(&[1u8; 64][..]).unwrap(),
+        ),
     );
     txn.check_signature()
         .expect_err("signature checking should fail");

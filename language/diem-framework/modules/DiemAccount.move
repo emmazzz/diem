@@ -196,6 +196,7 @@ module DiemAccount {
     const PROLOGUE_EINVALID_WRITESET_SENDER: u64 = 1010;
     const PROLOGUE_ESEQUENCE_NUMBER_TOO_BIG: u64 = 1011;
     const PROLOGUE_EBAD_TRANSACTION_FEE_CURRENCY: u64 = 1012;
+    const PROLOGUE_ESECONDARY_KEYS_ADDRESSES_COUNT_MISMATCH: u64 = 1013;
 
     /// Initialize this module. This is only callable from genesis.
     public fun initialize(
@@ -1494,6 +1495,8 @@ module DiemAccount {
             sender,
             txn_sequence_number,
             txn_public_key,
+            Vector::empty(),
+            Vector::empty(),
             txn_gas_price,
             txn_max_gas_units,
             txn_expiration_time,
@@ -1536,6 +1539,8 @@ module DiemAccount {
         sender: &signer,
         txn_sequence_number: u64,
         txn_public_key: vector<u8>,
+        secondary_addresses: vector<address>,
+        secondary_public_keys: vector<vector<u8>>,
         txn_gas_price: u64,
         txn_max_gas_units: u64,
         txn_expiration_time: u64,
@@ -1551,6 +1556,8 @@ module DiemAccount {
             sender,
             txn_sequence_number,
             txn_public_key,
+            secondary_addresses,
+            secondary_public_keys,
             txn_gas_price,
             txn_max_gas_units,
             txn_expiration_time,
@@ -1601,6 +1608,8 @@ module DiemAccount {
             sender,
             txn_sequence_number,
             txn_public_key,
+            Vector::empty(),
+            Vector::empty(),
             0,
             0,
             txn_expiration_time,
@@ -1641,6 +1650,8 @@ module DiemAccount {
         sender: &signer,
         txn_sequence_number: u64,
         txn_public_key: vector<u8>,
+        secondary_addresses: vector<address>,
+        secondary_public_keys: vector<vector<u8>>,
         txn_gas_price: u64,
         txn_max_gas_units: u64,
         txn_expiration_time_seconds: u64,
@@ -1668,6 +1679,24 @@ module DiemAccount {
             Hash::sha3_256(txn_public_key) == *&sender_account.authentication_key,
             Errors::invalid_argument(PROLOGUE_EINVALID_ACCOUNT_AUTH_KEY),
         );
+
+
+        let num_secondary_signers = Vector::length(&secondary_addresses);
+        assert(
+            Vector::length(&secondary_public_keys) == num_secondary_signers,
+            Errors::invalid_argument(PROLOGUE_ESECONDARY_KEYS_ADDRESSES_COUNT_MISMATCH),
+        );
+
+        let i = 0;
+        while (i < num_secondary_signers) {
+            let signer_account = borrow_global<DiemAccount>(*Vector::borrow(&secondary_addresses, i));
+            let signer_public_key = *Vector::borrow(&secondary_public_keys, i);
+            assert(
+                Hash::sha3_256(signer_public_key) == *&signer_account.authentication_key,
+                Errors::invalid_argument(PROLOGUE_EINVALID_ACCOUNT_AUTH_KEY),
+            );
+            i = i + 1;
+        };
 
         // [PCA5]: Check that the max transaction fee does not overflow a u64 value.
         assert(

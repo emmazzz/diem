@@ -37,7 +37,9 @@ use diem_types::{
     account_address::AccountAddress,
     account_config::XUS_NAME,
     chain_id::ChainId,
-    transaction::{RawTransaction, SignedTransaction, Transaction},
+    transaction::{
+        authenticator::AccountAuthenticator, RawTransaction, SignedTransaction, Transaction,
+    },
 };
 use std::time::Duration;
 use thiserror::Error;
@@ -286,7 +288,10 @@ where
 
         let operator_pubkey = self.storage.get_public_key(OPERATOR_KEY)?.public_key;
         let txn_signature = self.storage.sign(OPERATOR_KEY, &txn)?;
-        let signed_txn = SignedTransaction::new(txn, operator_pubkey, txn_signature);
+        let signed_txn = SignedTransaction::new(
+            txn,
+            AccountAuthenticator::ed25519(operator_pubkey, txn_signature),
+        );
 
         self.diem
             .submit_transaction(Transaction::UserTransaction(signed_txn))?;

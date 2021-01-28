@@ -465,6 +465,9 @@ pub enum StatusCode {
     SEQUENCE_NUMBER_TOO_BIG = 24,
     // The gas currency is not registered as a TransactionFee currency
     BAD_TRANSACTION_FEE_CURRENCY = 25,
+    // The number of secondary signer addresses is different from the number of secondary
+    // public keys provided.
+    SECONDARY_KEYS_ADDRESSES_COUNT_MISMATCH = 26,
 
     // When a code module/script is published it is verified. These are the
     // possible errors that can arise from the verification process.

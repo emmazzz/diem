@@ -28,7 +28,7 @@ use diem_types::{
     chain_id::ChainId,
     ledger_info::LedgerInfoWithSignatures,
     transaction::{
-        authenticator::AuthenticationKey,
+        authenticator::{AccountAuthenticator, AuthenticationKey},
         helpers::{create_unsigned_txn, create_user_txn, TransactionSigner},
         parse_transaction_argument, Module, RawTransaction, Script, SignedTransaction,
         TransactionArgument, TransactionPayload, Version, WriteSetPayload,
@@ -927,7 +927,10 @@ impl ClientProxy {
         public_key: Ed25519PublicKey,
         signature: Ed25519Signature,
     ) -> Result<()> {
-        let txn = SignedTransaction::new(raw_txn, public_key, signature);
+        let txn = SignedTransaction::new(
+            raw_txn,
+            AccountAuthenticator::ed25519(public_key, signature),
+        );
         self.submit_and_wait(&txn, true)?;
         Ok(())
     }

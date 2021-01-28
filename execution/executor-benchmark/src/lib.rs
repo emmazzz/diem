@@ -21,7 +21,8 @@ use diem_types::{
     chain_id::ChainId,
     ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
     transaction::{
-        authenticator::AuthenticationKey, RawTransaction, Script, SignedTransaction, Transaction,
+        authenticator::{AccountAuthenticator, AuthenticationKey},
+        RawTransaction, Script, SignedTransaction, Transaction,
     },
 };
 use diem_vm::DiemVM;
@@ -395,7 +396,10 @@ fn create_transaction(
     );
 
     let signature = private_key.sign(&raw_txn);
-    let signed_txn = SignedTransaction::new(raw_txn, public_key, signature);
+    let signed_txn = SignedTransaction::new(
+        raw_txn,
+        AccountAuthenticator::ed25519(public_key, signature),
+    );
     Transaction::UserTransaction(signed_txn)
 }
 

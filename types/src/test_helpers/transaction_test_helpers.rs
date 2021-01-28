@@ -5,7 +5,10 @@ use crate::{
     account_address::AccountAddress,
     account_config::XUS_NAME,
     chain_id::ChainId,
-    transaction::{Module, RawTransaction, Script, SignatureCheckedTransaction, SignedTransaction},
+    transaction::{
+        authenticator::AccountAuthenticator, Module, RawTransaction, Script,
+        SignatureCheckedTransaction, SignedTransaction,
+    },
     write_set::WriteSet,
 };
 use diem_crypto::{ed25519::*, traits::*};
@@ -37,7 +40,10 @@ pub fn get_test_signed_module_publishing_transaction(
 
     let signature = private_key.sign(&raw_txn);
 
-    SignedTransaction::new(raw_txn, public_key, signature)
+    SignedTransaction::new(
+        raw_txn,
+        AccountAuthenticator::ed25519(public_key, signature),
+    )
 }
 
 // Test helper for transaction creation
@@ -65,7 +71,10 @@ pub fn get_test_signed_transaction(
 
     let signature = private_key.sign(&raw_txn);
 
-    SignedTransaction::new(raw_txn, public_key, signature)
+    SignedTransaction::new(
+        raw_txn,
+        AccountAuthenticator::ed25519(public_key, signature),
+    )
 }
 
 // Test helper for creating transactions for which the signature hasn't been checked.
@@ -120,7 +129,10 @@ fn get_test_unchecked_transaction_(
 
     let signature = private_key.sign(&raw_txn);
 
-    SignedTransaction::new(raw_txn, public_key, signature)
+    SignedTransaction::new(
+        raw_txn,
+        AccountAuthenticator::ed25519(public_key, signature),
+    )
 }
 
 // Test helper for transaction creation. Short version for get_test_signed_transaction
