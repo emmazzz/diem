@@ -13,7 +13,6 @@ module DiemAccount {
     use 0x1::DualAttestation;
     use 0x1::Errors;
     use 0x1::Event::{Self, EventHandle};
-    use 0x1::Hash;
     use 0x1::XDX::XDX;
     use 0x1::BCS;
     use 0x1::DiemConfig;
@@ -1480,7 +1479,7 @@ module DiemAccount {
     fun module_prologue<Token>(
         sender: &signer,
         txn_sequence_number: u64,
-        txn_public_key: vector<u8>,
+        txn_sender_public_key_hash: vector<u8>,
         txn_gas_price: u64,
         txn_max_gas_units: u64,
         txn_expiration_time: u64,
@@ -1494,7 +1493,7 @@ module DiemAccount {
         prologue_common<Token>(
             sender,
             txn_sequence_number,
-            txn_public_key,
+            txn_sender_public_key_hash,
             Vector::empty(),
             Vector::empty(),
             txn_gas_price,
@@ -1515,7 +1514,7 @@ module DiemAccount {
     spec schema ModulePrologueAbortsIf<Token> {
         sender: signer;
         txn_sequence_number: u64;
-        txn_public_key: vector<u8>;
+        txn_sender_public_key_hash: vector<u8>;
         chain_id: u8;
         max_transaction_fee: u128;
         txn_expiration_time_seconds: u64;
@@ -1523,7 +1522,7 @@ module DiemAccount {
         include PrologueCommonAbortsIf<Token> {
             transaction_sender,
             txn_sequence_number,
-            txn_public_key,
+            txn_sender_public_key_hash,
             chain_id,
             max_transaction_fee,
             txn_expiration_time_seconds,
@@ -1538,9 +1537,9 @@ module DiemAccount {
     fun script_prologue<Token>(
         sender: &signer,
         txn_sequence_number: u64,
-        txn_public_key: vector<u8>,
-        secondary_addresses: vector<address>,
-        secondary_public_keys: vector<vector<u8>>,
+        txn_sender_public_key_hash: vector<u8>,
+        secondary_signer_addresses: vector<address>,
+        secondary_signer_public_key_hashes: vector<vector<u8>>,
         txn_gas_price: u64,
         txn_max_gas_units: u64,
         txn_expiration_time: u64,
@@ -1555,9 +1554,9 @@ module DiemAccount {
         prologue_common<Token>(
             sender,
             txn_sequence_number,
-            txn_public_key,
-            secondary_addresses,
-            secondary_public_keys,
+            txn_sender_public_key_hash,
+            secondary_signer_addresses,
+            secondary_signer_public_key_hashes,
             txn_gas_price,
             txn_max_gas_units,
             txn_expiration_time,
@@ -1576,7 +1575,7 @@ module DiemAccount {
     spec schema ScriptPrologueAbortsIf<Token> {
         sender: signer;
         txn_sequence_number: u64;
-        txn_public_key: vector<u8>;
+        txn_sender_public_key_hash: vector<u8>;
         chain_id: u8;
         max_transaction_fee: u128;
         txn_expiration_time_seconds: u64;
@@ -1593,7 +1592,7 @@ module DiemAccount {
     fun writeset_prologue(
         sender: &signer,
         txn_sequence_number: u64,
-        txn_public_key: vector<u8>,
+        txn_sender_public_key_hash: vector<u8>,
         txn_expiration_time: u64,
         chain_id: u8,
     ) acquires DiemAccount, Balance {
@@ -1607,7 +1606,7 @@ module DiemAccount {
         prologue_common<XUS>(
             sender,
             txn_sequence_number,
-            txn_public_key,
+            txn_sender_public_key_hash,
             Vector::empty(),
             Vector::empty(),
             0,
@@ -1626,7 +1625,7 @@ module DiemAccount {
     spec schema WritesetPrologueAbortsIf {
         sender: signer;
         txn_sequence_number: u64;
-        txn_public_key: vector<u8>;
+        txn_sender_public_key_hash: vector<u8>;
         txn_expiration_time_seconds: u64;
         chain_id: u8;
         let transaction_sender = Signer::spec_address_of(sender);
@@ -1649,9 +1648,9 @@ module DiemAccount {
     fun prologue_common<Token>(
         sender: &signer,
         txn_sequence_number: u64,
-        txn_public_key: vector<u8>,
-        secondary_addresses: vector<address>,
-        secondary_public_keys: vector<vector<u8>>,
+        txn_sender_public_key_hash: vector<u8>,
+        secondary_signer_addresses: vector<address>,
+        secondary_signer_public_key_hashes: vector<vector<u8>>,
         txn_gas_price: u64,
         txn_max_gas_units: u64,
         txn_expiration_time_seconds: u64,
@@ -1676,23 +1675,26 @@ module DiemAccount {
 
         // [PCA4]: Check that the hash of the transaction's public key matches the account's auth key
         assert(
-            Hash::sha3_256(txn_public_key) == *&sender_account.authentication_key,
+            txn_sender_public_key_hash == *&sender_account.authentication_key,
             Errors::invalid_argument(PROLOGUE_EINVALID_ACCOUNT_AUTH_KEY),
         );
 
 
-        let num_secondary_signers = Vector::length(&secondary_addresses);
+        let num_secondary_signers = Vector::length(&secondary_signer_addresses);
         assert(
-            Vector::length(&secondary_public_keys) == num_secondary_signers,
+            Vector::length(&secondary_signer_public_key_hashes) == num_secondary_signers,
             Errors::invalid_argument(PROLOGUE_ESECONDARY_KEYS_ADDRESSES_COUNT_MISMATCH),
         );
 
         let i = 0;
         while (i < num_secondary_signers) {
-            let signer_account = borrow_global<DiemAccount>(*Vector::borrow(&secondary_addresses, i));
-            let signer_public_key = *Vector::borrow(&secondary_public_keys, i);
+            let secondary_address = *Vector::borrow(&secondary_signer_addresses, i);
+            assert(exists_at(secondary_address), Errors::invalid_argument(PROLOGUE_EACCOUNT_DNE));
+
+            let signer_account = borrow_global<DiemAccount>(secondary_address);
+            let signer_public_key_hash = *Vector::borrow(&secondary_signer_public_key_hashes, i);
             assert(
-                Hash::sha3_256(signer_public_key) == *&signer_account.authentication_key,
+                signer_public_key_hash == *&signer_account.authentication_key,
                 Errors::invalid_argument(PROLOGUE_EINVALID_ACCOUNT_AUTH_KEY),
             );
             i = i + 1;
@@ -1764,7 +1766,7 @@ module DiemAccount {
     spec schema PrologueCommonAbortsIf<Token> {
         transaction_sender: address;
         txn_sequence_number: u64;
-        txn_public_key: vector<u8>;
+        txn_sender_public_key_hash: vector<u8>;
         chain_id: u8;
         max_transaction_fee: u128;
         txn_expiration_time_seconds: u64;
@@ -1777,7 +1779,7 @@ module DiemAccount {
         /// [PCA3] Covered: L57 (Match 0)
         aborts_if AccountFreezing::spec_account_is_frozen(transaction_sender) with Errors::INVALID_STATE;
         /// [PCA4] Covered: L59 (Match 1)
-        aborts_if Hash::sha3_256(txn_public_key) != global<DiemAccount>(transaction_sender).authentication_key with Errors::INVALID_ARGUMENT;
+        aborts_if txn_sender_public_key_hash != global<DiemAccount>(transaction_sender).authentication_key with Errors::INVALID_ARGUMENT;
         /// [PCA5] Covered: L69 (Match 5)
         aborts_if max_transaction_fee > MAX_U64 with Errors::INVALID_ARGUMENT;
         /// [PCA6] Covered: L69 (Match 5)

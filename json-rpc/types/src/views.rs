@@ -654,8 +654,8 @@ impl From<Transaction> for TransactionDataView {
                     signature_scheme: t.authenticator().sender().scheme().to_string(),
                     signature: t.authenticator().sender().signature_bytes().into(),
                     public_key: t.authenticator().sender().public_key_bytes().into(),
-                    secondary_signers: t
-                        .secondary_signers()
+                    secondary_signers: t.authenticator()
+                        .secondary_signer_addreses()
                         .iter()
                         .map(|signer| signer.into())
                         .collect(),

@@ -658,6 +658,7 @@ and emits a reconfigurationevent.
 <pre><code><b>pragma</b> opaque;
 <b>pragma</b> verify_duration_estimate = 100;
 <b>modifies</b> <b>global</b>&lt;<a href="DiemConfig.md#0x1_DiemConfig_DiemConfig">DiemConfig::DiemConfig</a>&lt;<a href="DiemSystem.md#0x1_DiemSystem">DiemSystem</a>&gt;&gt;(<a href="CoreAddresses.md#0x1_CoreAddresses_DIEM_ROOT_ADDRESS">CoreAddresses::DIEM_ROOT_ADDRESS</a>());
+<b>include</b> <a href="ValidatorConfig.md#0x1_ValidatorConfig_AbortsIfGetOperator">ValidatorConfig::AbortsIfGetOperator</a>{addr: validator_addr};
 <b>include</b> <a href="DiemSystem.md#0x1_DiemSystem_UpdateConfigAndReconfigureAbortsIf">UpdateConfigAndReconfigureAbortsIf</a>;
 <b>include</b> <a href="DiemSystem.md#0x1_DiemSystem_UpdateConfigAndReconfigureEnsures">UpdateConfigAndReconfigureEnsures</a>;
 <a name="0x1_DiemSystem_is_validator_info_updated$20"></a>
@@ -1024,7 +1025,8 @@ It has a loop, so there are spec blocks in the code to assert loop invariants.
 
 
 
-<pre><code><b>pragma</b> opaque;
+<pre><code><b>pragma</b> verify = <b>false</b>;
+<b>pragma</b> opaque;
 <b>aborts_if</b> <b>false</b>;
 <a name="0x1_DiemSystem_size$21"></a>
 <b>let</b> size = len(validators);
@@ -1284,7 +1286,6 @@ Genesis.
 
 ### Helper Functions
 
-
 Fetches the currently published validator set from the published DiemConfig<DiemSystem>
 resource.
 
@@ -1293,7 +1294,7 @@ resource.
 
 
 <pre><code><b>define</b> <a href="DiemSystem.md#0x1_DiemSystem_spec_get_validators">spec_get_validators</a>(): vector&lt;<a href="DiemSystem.md#0x1_DiemSystem_ValidatorInfo">ValidatorInfo</a>&gt; {
-    <a href="DiemConfig.md#0x1_DiemConfig_get">DiemConfig::get</a>&lt;<a href="DiemSystem.md#0x1_DiemSystem">DiemSystem</a>&gt;().validators
+   <a href="DiemConfig.md#0x1_DiemConfig_get">DiemConfig::get</a>&lt;<a href="DiemSystem.md#0x1_DiemSystem">DiemSystem</a>&gt;().validators
 }
 </code></pre>
 

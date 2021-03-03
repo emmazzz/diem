@@ -308,3 +308,17 @@ pub fn multi_agent_mint_txn(
         .sequence_number(seq_num)
         .sign_multi_agent()
 }
+
+pub fn multi_agent_swap_script(xus_amount: u64, xdx_amount: u64) -> Script {
+    let mut args: Vec<TransactionArgument> = Vec::new();
+    args.push(TransactionArgument::U64(xus_amount));
+    args.push(TransactionArgument::U64(xdx_amount));
+    Script::new(MULTI_AGENT_SWAP_SCRIPT.to_vec(), vec![], args)
+}
+
+pub fn multi_agent_mint_script(mint_amount: u64, tier_index: u64) -> Script {
+    let mut args: Vec<TransactionArgument> = Vec::new();
+    args.push(TransactionArgument::U64(mint_amount));
+    args.push(TransactionArgument::U64(tier_index));
+    Script::new(MULTI_AGENT_MINT_SCRIPT.to_vec(), vec![], args)
+}

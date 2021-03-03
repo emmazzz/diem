@@ -26,6 +26,7 @@ pub struct TransactionMetadata {
     pub expiration_timestamp_secs: u64,
     pub chain_id: ChainId,
     pub script_hash: Vec<u8>,
+    // pub txn_pub_key: Option<Vec<u8>>,
 }
 
 impl TransactionMetadata {
@@ -37,7 +38,7 @@ impl TransactionMetadata {
                 .sender()
                 .authentication_key_preimage()
                 .into_vec(),
-            secondary_signers: txn.secondary_signers(),
+            secondary_signers: txn.authenticator().secondary_signer_addreses(),
             secondary_authentication_key_preimages: txn
                 .authenticator()
                 .secondary_signers()
@@ -55,6 +56,7 @@ impl TransactionMetadata {
                 TransactionPayload::Module(_) => vec![],
                 TransactionPayload::WriteSet(_) => vec![],
             },
+            // txn_pub_key: txn.txn_pub_key().map_or(None, |key| Some(key.to_bytes().to_vec())),
         }
     }
 
@@ -112,6 +114,7 @@ impl Default for TransactionMetadata {
             expiration_timestamp_secs: 0,
             chain_id: ChainId::test(),
             script_hash: vec![],
+            // txn_pub_key: None,
         }
     }
 }

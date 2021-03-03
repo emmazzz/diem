@@ -77,11 +77,7 @@ impl VMValidator for DiemVMValidator {
         let txn = if let Ok(t) = transaction.check_signature() {
             t
         } else {
-            return VMValidatorResult::new(
-                Some(StatusCode::INVALID_SIGNATURE),
-                0,
-                GovernanceRole::NonGovernanceRole,
-            );
+            return VMValidatorResult::error(StatusCode::INVALID_SIGNATURE);
         };
 
         let remote_cache = StateViewCache::new(state_view);
@@ -129,6 +125,10 @@ pub(crate) fn validate_signature_checked_transaction<R: RemoteCache>(
     remote_cache: &StateViewCache<'_>,
     allow_too_new: bool,
 ) -> Result<(u64, Identifier), VMStatus> {
+    if transaction.contains_duplicate_signers() {
+        return Err(VMStatus::Error(StatusCode::SIGNERS_CONTAIN_DUPLICATES));
+    }
+
     let gas_price = transaction.gas_unit_price();
     let currency_code_string = transaction.gas_currency_code();
     let currency_code = match account_config::from_currency_code_string(currency_code_string) {

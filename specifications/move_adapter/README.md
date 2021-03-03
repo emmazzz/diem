@@ -84,6 +84,9 @@ pub struct SignedTransaction {
 pub struct RawTransaction {
     /// Sender's address.
     sender: AccountAddress,
+    
+    /// Secondary participants of the transaction.
+    secondary_signers: Vec<AccountAddress>,
 
     /// Sequence number of this transaction. This must match the sequence number
     /// stored in the sender's account at the time the transaction executes.
@@ -111,6 +114,9 @@ pub struct RawTransaction {
 
     /// Chain ID of the Diem network this transaction is intended for.
     chain_id: ChainId,
+
+    /// Optional public key unique to each transaction.
+    txn_pub_key: Option<Ed25519PublicKey>,
 }
 
 /// Different kinds of transactions.
@@ -163,8 +169,11 @@ The adapter performs a sequence of checks to validate a transaction. Some of the
 
 The adapter performs the following steps for any transaction, regardless of the payload:
 
-* Check if the signature in the `SignedTransaction` is consistent with the public key and the `RawTransaction` content. If not, this check fails with an `INVALID_SIGNATURE` status code. Note that comparing the transaction's public key against the sender account's authorization key is done separately in Move code.
+* Check if the sender and secondary signers' signatures in the `SignedTransaction` are consistent with their public key and the `RawTransaction` content. If not, this check fails with an `INVALID_SIGNATURE` status code. Note that comparing the transaction's public keys against the sender and secondary signer accounts' authorization keys is done separately in [Move code](#Prologue-Checks).
 
+* If secondary signers exist, check that all signers including the sender and secondary signers
+  have distinct account addresses. If not, validation fails with a `SIGNERS_CONTAIN_DUPLICATES` status code.
+  
 * Check that the `gas_currency_code` in the `RawTransaction` is a name composed of ASCII alphanumeric characters where the first character is a letter. If not, validation will fail with an `INVALID_GAS_SPECIFIER` status code. Note that this check does not ensure that the name corresponds to a currency recognized by the Diem Framework.
 
 * Normalize the `gas_unit_price` from the `RawTransaction` to the Diem (XDX) currency. If the the validation is successful, the normalized gas price is returned as the `score` field of the `VMValidatorResult` for use in prioritizing the transaction. The normalization is calculated using the `to_xdx_exchange_rate` field of the on-chain `CurrencyInfo` for the specified gas currency. This can fail with a status code of `CURRENCY_INFO_DOES_NOT_EXIST` if the exchange rate cannot be retrieved.
@@ -211,6 +220,16 @@ The following checks are performed by all the prologue functions:
 * Call the `AccountFreezing::account_is_frozen` function to check if the transaction sender's account is frozen. If so, the status code is set to `SENDING_ACCOUNT_FROZEN`.
 
 * Check that the hash of the transaction's public key (from the `authenticator` in the `SignedTransaction`) matches the authentication key in the sender's account. If not, validation fails with an `INVALID_AUTH_KEY` status code.
+
+* If secondary signers exist for the transaction, perform the following checks:
+    * Check that the number of secondary signer addresses provided is the same as the 
+      number of secondary signer public key hashes provided. If not, validation fails with a 
+      `SECONDARY_KEYS_ADDRESSES_COUNT_MISMATCH` status code.
+    * For each secondary signer, check if the secondary signer has an account, and if not, 
+      the validation fails with a `SENDING_ACCOUNT_DOES_NOT_EXIST` status code.
+    * For each secondary signer, check that the hash of the secondary signer's public key 
+      (from the `authenticator` in the `SignedTransaction`) matches the authentication key in the secondary signer's account. 
+      If not, validation fails with an `INVALID_AUTH_KEY` status code.
 
 * The transaction sender must be able to pay the maximum transaction fee. The maximum fee is the product of the transaction's `max_gas_amount` and `gas_unit_price` fields.
 If the maximum fee is non-zero, the coin specified by the transaction's `gas_currency_code`
@@ -766,6 +785,8 @@ The VM performs the following steps:
     and if there are errors, execution stops and the error returned.
 * **Build the argument list**. If the first parameter of the script main signature is `&Signer` the VM
 prepends the argument list in input with an instance of a `Signer` whose address is the `sender: AccountAddress`.
+If additional secondary signers exist, the VM inserts `Signer` instances representing the secondary signers
+to the argument list right after the sender `Signer` instance.
 The list is then checked against a whitelisted set of permitted types (_specify which types_).
 The VM returns an error with `StatusCode::TYPE_MISMATCH` if any of the types is not permitted.
 * **Execute the script**. The VM invokes the interpreter to [execute the script](#Interpreter).

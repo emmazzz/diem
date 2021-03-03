@@ -713,8 +713,7 @@ impl DiemVM {
                 (vm_status, output, Some("write_set".to_string()))
             }
             PreprocessedTransaction::InvalidSignature => {
-                let (vm_status, output) =
-                    discard_error_vm_status(VMStatus::Error(StatusCode::INVALID_SIGNATURE));
+                let (vm_status, output) = discard_error_vm_status(VMStatus::Error(StatusCode::INVALID_SIGNATURE));
                 (vm_status, output, None)
             }
         })

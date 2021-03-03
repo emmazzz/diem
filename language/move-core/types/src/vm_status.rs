@@ -468,6 +468,8 @@ pub enum StatusCode {
     // The number of secondary signer addresses is different from the number of secondary
     // public keys provided.
     SECONDARY_KEYS_ADDRESSES_COUNT_MISMATCH = 26,
+    // There are duplicates among signers, including the sender and all the secondary signers
+    SIGNERS_CONTAIN_DUPLICATES = 27,
 
     // When a code module/script is published it is verified. These are the
     // possible errors that can arise from the verification process.

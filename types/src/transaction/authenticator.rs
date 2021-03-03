@@ -1,10 +1,7 @@
 // Copyright (c) The Diem Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{
-    account_address::AccountAddress,
-    transaction::authenticator::TransactionAuthenticator::SingleAgent,
-};
+use crate::account_address::AccountAddress;
 use anyhow::{ensure, Error, Result};
 use diem_crypto::{
     ed25519::{Ed25519PublicKey, Ed25519Signature},
@@ -19,6 +16,7 @@ use proptest_derive::Arbitrary;
 use rand::{rngs::OsRng, Rng};
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, fmt, str::FromStr};
+use crate::transaction::{RawTransaction, RawTransactionWithData};
 
 /// Each transaction submitted to the Diem blockchain contains a `TransactionAuthenticator`. During
 /// transaction execution, the executor will check if every `AccountAuthenticator`'s signature on
@@ -28,12 +26,34 @@ use std::{convert::TryFrom, fmt, str::FromStr};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum TransactionAuthenticator {
+    /// Single signature
+    /// This variant is kept for backwards compatibility.
+    Ed25519 {
+        public_key: Ed25519PublicKey,
+        signature: Ed25519Signature,
+    },
+    /// K-of-N multisignature
+    /// This variant is kept for backwards compatibility.
+    MultiEd25519 {
+        public_key: MultiEd25519PublicKey,
+        signature: MultiEd25519Signature,
+    },
     /// Single-agent transaction.
     SingleAgent { sender: AccountAuthenticator },
     /// Multi-agent transaction.
     MultiAgent {
         sender: AccountAuthenticator,
+        secondary_signer_addresses: Vec<AccountAddress>,
         secondary_signers: Vec<AccountAuthenticator>,
+    },
+    /// Multi-agent transaction with an additional pair of private and public
+    /// keys, specific to each transaction.
+    PresignedMultiAgent {
+        sender: AccountAuthenticator,
+        secondary_signer_addresses: Vec<AccountAddress>,
+        secondary_signers: Vec<AccountAuthenticator>,
+        /// Authenticator containing signature signed using the transaction private key
+        txn_auth: AccountAuthenticator,
     },
 }
 
@@ -44,47 +64,135 @@ impl TransactionAuthenticator {
 
     pub fn new_multi_agent(
         sender: AccountAuthenticator,
+        secondary_signer_addresses: Vec<AccountAddress>,
         secondary_signers: Vec<AccountAuthenticator>,
     ) -> Self {
         Self::MultiAgent {
             sender,
+            secondary_signer_addresses,
             secondary_signers,
         }
     }
 
+    pub fn new_presigned_multi_agent(
+        sender: AccountAuthenticator,
+        secondary_signer_addresses: Vec<AccountAddress>,
+        secondary_signers: Vec<AccountAuthenticator>,
+        txn_auth: AccountAuthenticator,
+    ) -> Self {
+        Self::PresignedMultiAgent {
+            sender,
+            secondary_signer_addresses,
+            secondary_signers,
+            txn_auth,
+        }
+    }
+
     /// Return Ok if all AccountAuthenticator's public keys match their signatures, Err otherwise
-    pub fn verify<T: Serialize + CryptoHash>(&self, message: &T) -> Result<()> {
+    pub fn verify(
+        &self,
+        raw_txn: &RawTransaction,
+    ) -> Result<()> {
         match self {
-            Self::SingleAgent { sender } => sender.verify(message),
+            Self::Ed25519 { public_key, signature } => {
+                signature.verify(raw_txn, public_key)
+            },
+            Self::MultiEd25519 { public_key, signature } => {
+                signature.verify(raw_txn, public_key)
+            },
+            Self::SingleAgent { sender } => sender.verify(raw_txn),
             Self::MultiAgent {
                 sender,
+                secondary_signer_addresses,
                 secondary_signers,
             } => {
-                sender.verify(message)?;
+                let message = RawTransactionWithData::new_multi_agent(
+                    raw_txn.clone(),
+                    secondary_signer_addresses.clone()
+                );
+                sender.verify(&message)?;
                 for signer in secondary_signers {
-                    signer.verify(message)?;
+                    signer.verify(&message)?;
                 }
                 Ok(())
+            }
+            Self::PresignedMultiAgent {
+                sender,
+                secondary_signer_addresses,
+                secondary_signers,
+                txn_auth,
+            } => {
+                let sender_message = RawTransactionWithData::new_presigned_multi_agent_for_sender(
+                    raw_txn.clone(),
+                    txn_auth.public_key_bytes(),
+                );
+                sender.verify(&sender_message)?;
+                let secondary_signer_message = RawTransactionWithData::new_presigned_multi_agent_for_secondary_signer(
+                    raw_txn.clone(),
+                    secondary_signer_addresses.clone(),
+                    txn_auth.public_key_bytes(),
+                );
+                for signer in secondary_signers {
+                    signer.verify(&secondary_signer_message)?;
+                }
+                txn_auth.verify(&secondary_signer_message)
             }
         }
     }
 
     pub fn sender(&self) -> AccountAuthenticator {
         match self {
+            Self::Ed25519 { public_key, signature } => {
+                AccountAuthenticator::ed25519(public_key.clone(), signature.clone())
+            },
+            Self::MultiEd25519 {public_key, signature} => {
+                AccountAuthenticator::multi_ed25519(public_key.clone(), signature.clone())
+            },
             Self::SingleAgent { sender } => sender.clone(),
             Self::MultiAgent {
                 sender,
-                secondary_signers: _,
+                ..
             } => sender.clone(),
+            Self::PresignedMultiAgent {
+                sender,
+                ..
+            } => sender.clone(),
+        }
+    }
+
+    pub fn secondary_signer_addreses(&self) -> Vec<AccountAddress> {
+        match self {
+            Self::Ed25519 { .. } |
+            Self::MultiEd25519 {public_key: _, signature: _} |
+            Self::SingleAgent { sender: _ } => vec![],
+            Self::MultiAgent {
+                sender: _,
+                secondary_signer_addresses,
+                ..
+            } => secondary_signer_addresses.to_vec(),
+            Self::PresignedMultiAgent {
+                sender: _,
+                secondary_signer_addresses,
+                ..
+            } => secondary_signer_addresses.to_vec(),
         }
     }
 
     pub fn secondary_signers(&self) -> Vec<AccountAuthenticator> {
         match self {
-            Self::SingleAgent { sender } => vec![],
+            Self::Ed25519 { .. } |
+            Self::MultiEd25519 {public_key: _, signature: _} |
+            Self::SingleAgent { sender: _ } => vec![],
             Self::MultiAgent {
                 sender: _,
+                secondary_signer_addresses: _,
                 secondary_signers,
+            } => secondary_signers.to_vec(),
+            Self::PresignedMultiAgent {
+                sender: _,
+                secondary_signer_addresses:_,
+                secondary_signers,
+                ..
             } => secondary_signers.to_vec(),
         }
     }
@@ -93,19 +201,38 @@ impl TransactionAuthenticator {
 impl fmt::Display for TransactionAuthenticator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Ed25519 {public_key: _, signature: _} => {
+                write!(
+                    f,
+                    "TransactionAuthenticator[scheme: Ed25519, sender: {}]",
+                    self.sender()
+                )
+            },
+            Self::MultiEd25519 {public_key: _, signature: _} => {
+                write!(
+                    f,
+                    "TransactionAuthenticator[scheme: MultiEd25519, sender: {}]",
+                    self.sender()
+                )
+            }
             Self::SingleAgent { sender } => {
                 write!(
                     f,
                     "TransactionAuthenticator[scheme: SingleAgent, sender: {}]",
-                    self.sender()
+                    sender
                 )
             }
             Self::MultiAgent {
                 sender,
+                secondary_signer_addresses,
                 secondary_signers,
             } => {
+                let mut sec_addrs: String = "".to_string();
+                for sec_addr in secondary_signer_addresses {
+                    sec_addrs = format!("{}\n\t\t\t{:#?},", sec_addrs, sec_addr);
+                }
                 let mut sec_signers: String = "".to_string();
-                for sec_signer in self.secondary_signers() {
+                for sec_signer in secondary_signers {
                     sec_signers = format!("{}\n\t\t\t{:#?},", sec_signers, sec_signer);
                 }
                 write!(
@@ -113,9 +240,34 @@ impl fmt::Display for TransactionAuthenticator {
                     "TransactionAuthenticator[\n\
                         \tscheme: MultiAgent, \n\
                         \tsender: {}\n\
+                        \tsecondary signer addresses: {}\n\
                         \tsecondary signers: {}]",
-                    self.sender(),
-                    sec_signers,
+                    sender, sec_addrs, sec_signers,
+                )
+            }
+            Self::PresignedMultiAgent {
+                sender,
+                secondary_signer_addresses,
+                secondary_signers,
+                txn_auth
+            } => {
+                let mut sec_addrs: String = "".to_string();
+                for sec_addr in secondary_signer_addresses {
+                    sec_addrs = format!("{}\n\t\t\t{:#?},", sec_addrs, sec_addr);
+                }
+                let mut sec_signers: String = "".to_string();
+                for sec_signer in secondary_signers {
+                    sec_signers = format!("{}\n\t\t\t{:#?},", sec_signers, sec_signer);
+                }
+                write!(
+                    f,
+                    "TransactionAuthenticator[\n\
+                        \tscheme: PresignedMultiAgent, \n\
+                        \tsender: {}\n\
+                        \tsecondary signer addresses: {}\n\
+                        \tsecondary signers: {}\n\
+                        \tper transaction authenticator: {}]",
+                    sender, sec_addrs, sec_signers, txn_auth
                 )
             }
         }

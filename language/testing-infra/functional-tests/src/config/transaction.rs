@@ -286,9 +286,6 @@ impl<'a> Config<'a> {
                 },
             }
         }
-        if sender.is_none() {
-            println!("sender is none");
-        }
         Ok(Self {
             disabled_stages,
             sender: sender.unwrap_or_else(|| config.accounts.get("default").unwrap().account()),

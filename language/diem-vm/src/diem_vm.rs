@@ -9,6 +9,7 @@ use crate::{
     system_module_names::*,
     transaction_metadata::TransactionMetadata,
 };
+use diem_crypto::HashValue;
 use diem_logger::prelude::*;
 use diem_state_view::StateView;
 use diem_types::{
@@ -216,15 +217,15 @@ impl DiemVMImpl {
         let gas_currency_ty =
             account_config::type_tag_for_currency_code(account_currency_symbol.to_owned());
         let txn_sequence_number = txn_data.sequence_number();
-        let txn_public_key = txn_data.authentication_key_preimage().to_vec();
+        let txn_public_key_hash = HashValue::sha3_256_of(&txn_data.authentication_key_preimage().to_vec()).to_vec();
         let txn_gas_price = txn_data.gas_unit_price().get();
         let txn_max_gas_units = txn_data.max_gas_amount().get();
         let txn_expiration_timestamp_secs = txn_data.expiration_timestamp_secs();
         let chain_id = txn_data.chain_id();
-        let secondary_key_preimages: Vec<MoveValue> = txn_data
+        let secondary_public_key_hashes: Vec<MoveValue> = txn_data
             .secondary_authentication_key_preimages
             .iter()
-            .map(|preimage| MoveValue::vector_u8(preimage.to_vec()))
+            .map(|preimage| MoveValue::vector_u8(HashValue::sha3_256_of(&preimage.to_vec()).to_vec()))
             .collect();
         session
             .execute_function(
@@ -234,9 +235,9 @@ impl DiemVMImpl {
                 serialize_values(&vec![
                     MoveValue::Signer(txn_data.sender),
                     MoveValue::U64(txn_sequence_number),
-                    MoveValue::vector_u8(txn_public_key),
+                    MoveValue::vector_u8(txn_public_key_hash),
                     MoveValue::vector_address(txn_data.secondary_signers()),
-                    MoveValue::Vector(secondary_key_preimages),
+                    MoveValue::Vector(secondary_public_key_hashes),
                     MoveValue::U64(txn_gas_price),
                     MoveValue::U64(txn_max_gas_units),
                     MoveValue::U64(txn_expiration_timestamp_secs),
@@ -263,7 +264,7 @@ impl DiemVMImpl {
         let gas_currency_ty =
             account_config::type_tag_for_currency_code(account_currency_symbol.to_owned());
         let txn_sequence_number = txn_data.sequence_number();
-        let txn_public_key = txn_data.authentication_key_preimage().to_vec();
+        let txn_public_key_hash = HashValue::sha3_256_of(&txn_data.authentication_key_preimage().to_vec()).to_vec();
         let txn_gas_price = txn_data.gas_unit_price().get();
         let txn_max_gas_units = txn_data.max_gas_amount().get();
         let txn_expiration_timestamp_secs = txn_data.expiration_timestamp_secs();
@@ -276,7 +277,7 @@ impl DiemVMImpl {
                 serialize_values(&vec![
                     MoveValue::Signer(txn_data.sender),
                     MoveValue::U64(txn_sequence_number),
-                    MoveValue::vector_u8(txn_public_key),
+                    MoveValue::vector_u8(txn_public_key_hash),
                     MoveValue::U64(txn_gas_price),
                     MoveValue::U64(txn_max_gas_units),
                     MoveValue::U64(txn_expiration_timestamp_secs),
@@ -376,7 +377,7 @@ impl DiemVMImpl {
         log_context: &impl LogContext,
     ) -> Result<(), VMStatus> {
         let txn_sequence_number = txn_data.sequence_number();
-        let txn_public_key = txn_data.authentication_key_preimage().to_vec();
+        let txn_public_key_hash = HashValue::sha3_256_of(&txn_data.authentication_key_preimage().to_vec()).to_vec();
         let txn_expiration_timestamp_secs = txn_data.expiration_timestamp_secs();
         let chain_id = txn_data.chain_id();
 
@@ -390,7 +391,7 @@ impl DiemVMImpl {
                 serialize_values(&vec![
                     MoveValue::Signer(txn_data.sender),
                     MoveValue::U64(txn_sequence_number),
-                    MoveValue::vector_u8(txn_public_key),
+                    MoveValue::vector_u8(txn_public_key_hash),
                     MoveValue::U64(txn_expiration_timestamp_secs),
                     MoveValue::U8(chain_id.id()),
                 ]),

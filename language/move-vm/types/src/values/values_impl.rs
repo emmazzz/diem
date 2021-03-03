@@ -61,9 +61,6 @@ enum ValueImpl {
 ///
 /// Except when not owned by the VM stack, a container always lives inside an Rc<RefCell<>>,
 /// making it possible to be shared by references.
-///
-/// TODO(emmazzz): add a way to support Vec<Vec<u8>>, used to represent the vector of public
-/// keys of secondary signers, which is a parameter passed into the script prologue.
 #[derive(Debug, Clone)]
 enum Container {
     Locals(Rc<RefCell<Vec<ValueImpl>>>),

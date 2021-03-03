@@ -7,11 +7,12 @@ use crate::{
     chain_id::ChainId,
     transaction::{
         authenticator::AccountAuthenticator, Module, RawTransaction, Script,
-        SignatureCheckedTransaction, SignedTransaction,
+        SignatureCheckedTransaction, SignedTransaction, TransactionPayload,
     },
     write_set::WriteSet,
 };
 use diem_crypto::{ed25519::*, traits::*};
+use crate::transaction::RawTransactionWithData;
 
 const MAX_GAS_AMOUNT: u64 = 1_000_000;
 const TEST_GAS_PRICE: u64 = 0;
@@ -176,6 +177,107 @@ pub fn get_test_unchecked_txn(
         TEST_GAS_PRICE,
         XUS_NAME.to_owned(),
         None,
+    )
+}
+
+pub fn get_test_unchecked_multi_agent_txn(
+    sender: AccountAddress,
+    secondary_signers: Vec<AccountAddress>,
+    sequence_number: u64,
+    sender_private_key: &Ed25519PrivateKey,
+    sender_public_key: Ed25519PublicKey,
+    secondary_private_keys: Vec<&Ed25519PrivateKey>,
+    secondary_public_keys: Vec<Ed25519PublicKey>,
+    script: Option<Script>,
+) -> SignedTransaction {
+    let expiration_time = diem_infallible::duration_since_epoch().as_secs() + 10; // 10 seconds from now.
+    let raw_txn = RawTransaction::new(
+        sender,
+        sequence_number,
+        TransactionPayload::Script(
+            script.unwrap_or_else(|| Script::new(EMPTY_SCRIPT.to_vec(), vec![], Vec::new())),
+        ),
+        MAX_GAS_AMOUNT,
+        TEST_GAS_PRICE,
+        XUS_NAME.to_owned(),
+        expiration_time,
+        ChainId::test(),
+    );
+    let message = RawTransactionWithData::new_multi_agent(raw_txn.clone(), secondary_signers.clone());
+
+    let sender_signature = sender_private_key.sign(&message);
+    let sender_authenticator = AccountAuthenticator::ed25519(sender_public_key, sender_signature);
+
+    let mut secondary_authenticators = vec![];
+    for i in 0..secondary_public_keys.len() {
+        let signature = secondary_private_keys[i].sign(&message);
+        secondary_authenticators.push(AccountAuthenticator::ed25519(
+            secondary_public_keys[i].clone(),
+            signature,
+        ));
+    }
+
+    SignedTransaction::new_multi_agent(
+        raw_txn,
+        sender_authenticator,
+        secondary_signers,
+        secondary_authenticators,
+    )
+}
+
+pub fn get_test_unchecked_presigned_multi_agent_txn(
+    sender: AccountAddress,
+    secondary_signers: Vec<AccountAddress>,
+    sequence_number: u64,
+    sender_private_key: &Ed25519PrivateKey,
+    sender_public_key: Ed25519PublicKey,
+    secondary_private_keys: Vec<&Ed25519PrivateKey>,
+    secondary_public_keys: Vec<Ed25519PublicKey>,
+    txn_private_key: &Ed25519PrivateKey,
+    txn_public_key: Ed25519PublicKey,
+    script: Option<Script>,
+) -> SignedTransaction {
+    let expiration_time = diem_infallible::duration_since_epoch().as_secs() + 10; // 10 seconds from now.
+    let raw_txn = RawTransaction::new(
+        sender,
+        sequence_number,
+        TransactionPayload::Script(
+            script.unwrap_or_else(|| Script::new(EMPTY_SCRIPT.to_vec(), vec![], Vec::new())),
+        ),
+        MAX_GAS_AMOUNT,
+        TEST_GAS_PRICE,
+        XUS_NAME.to_owned(),
+        expiration_time,
+        ChainId::test(),
+    );
+    let sender_message = RawTransactionWithData::new_presigned_multi_agent_for_sender(
+        raw_txn.clone(), txn_public_key.to_bytes().to_vec());
+
+    let sender_signature = sender_private_key.sign(&sender_message);
+    let sender_authenticator = AccountAuthenticator::ed25519(sender_public_key, sender_signature);
+
+    let secondary_signer_message = RawTransactionWithData::new_presigned_multi_agent_for_secondary_signer(
+        raw_txn.clone(), secondary_signers.clone(), txn_public_key.to_bytes().to_vec());
+    let mut secondary_authenticators = vec![];
+    for i in 0..secondary_public_keys.len() {
+        let signature = secondary_private_keys[i].sign(&secondary_signer_message);
+        secondary_authenticators.push(AccountAuthenticator::ed25519(
+            secondary_public_keys[i].clone(),
+            signature,
+        ));
+    }
+
+    let txn_auth = AccountAuthenticator::ed25519(
+        txn_public_key,
+        txn_private_key.sign(&secondary_signer_message),
+    );
+
+    SignedTransaction::new_presigned_multi_agent(
+        raw_txn,
+        sender_authenticator,
+        secondary_signers,
+        secondary_authenticators,
+        txn_auth,
     )
 }
 

@@ -210,6 +210,7 @@ pub struct TransactionBuilder {
     pub gas_currency_code: Option<String>,
     pub chain_id: Option<ChainId>,
     pub ttl: Option<u64>,
+    pub txn_pub_key: Option<Ed25519PublicKey>,
 }
 
 impl TransactionBuilder {
@@ -224,6 +225,7 @@ impl TransactionBuilder {
             gas_currency_code: None,
             chain_id: None,
             ttl: None,
+            txn_pub_key: None,
         }
     }
 
@@ -277,27 +279,14 @@ impl TransactionBuilder {
         self
     }
 
+    pub fn txn_pub_key(mut self, txn_pub_key: Ed25519PublicKey) -> Self {
+        self.txn_pub_key = Some(txn_pub_key);
+        self
+    }
+
     pub fn raw(self) -> RawTransaction {
         RawTransaction::new(
             *self.sender.address(),
-            self.sequence_number.expect("sequence number not set"),
-            self.program.expect("transaction payload not set"),
-            self.max_gas_amount.unwrap_or(gas_costs::TXN_RESERVED),
-            self.gas_unit_price.unwrap_or(0),
-            self.gas_currency_code
-                .unwrap_or_else(|| XUS_NAME.to_owned()),
-            self.ttl.unwrap_or(DEFAULT_EXPIRATION_TIME),
-            ChainId::test(),
-        )
-    }
-
-    pub fn raw_multi_agent(self) -> RawTransaction {
-        RawTransaction::new_multi_agent(
-            *self.sender.address(),
-            self.secondary_signers
-                .iter()
-                .map(|signer| *signer.address())
-                .collect(),
             self.sequence_number.expect("sequence number not set"),
             self.program.expect("transaction payload not set"),
             self.max_gas_amount.unwrap_or(gas_costs::TXN_RESERVED),
@@ -327,20 +316,17 @@ impl TransactionBuilder {
     }
 
     pub fn sign_multi_agent(self) -> SignedTransaction {
-        let secondary_private_keys = self.secondary_signers
+        let secondary_signer_addresses: Vec<AccountAddress> = self.secondary_signers
+            .iter()
+            .map(|signer| *signer.address())
+            .collect();
+        let secondary_private_keys = self
+            .secondary_signers
             .iter()
             .map(|signer| &signer.privkey)
             .collect();
-        let secondary_public_keys = self.secondary_signers
-            .iter()
-            .map(|signer| signer.pubkey.clone())
-            .collect();
-        RawTransaction::new_multi_agent(
+        RawTransaction::new(
             *self.sender.address(),
-            self.secondary_signers
-                .iter()
-                .map(|signer| *signer.address())
-                .collect(),
             self.sequence_number.expect("sequence number not set"),
             self.program.expect("transaction payload not set"),
             self.max_gas_amount.unwrap_or(gas_costs::TXN_RESERVED),
@@ -352,9 +338,8 @@ impl TransactionBuilder {
         )
         .sign_multi_agent(
             &self.sender.privkey,
-            self.sender.pubkey,
+            secondary_signer_addresses,
             secondary_private_keys,
-            secondary_public_keys,
         )
         .unwrap()
         .into_inner()

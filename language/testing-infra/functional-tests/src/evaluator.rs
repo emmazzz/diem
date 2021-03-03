@@ -405,9 +405,8 @@ fn make_script_transaction(
             )
             .sign(params.privkey, params.pubkey.clone())?
         } else {
-            RawTransaction::new_multi_agent(
+            RawTransaction::new(
                 params.sender_addr,
-                params.secondary_signer_addresses,
                 params.sequence_number,
                 TransactionPayload::Script(script),
                 params.max_gas_amount,
@@ -418,9 +417,8 @@ fn make_script_transaction(
             )
             .sign_multi_agent(
                 params.privkey,
-                params.pubkey.clone(),
+                params.secondary_signer_addresses,
                 params.secondary_privkeys,
-                params.secondary_pubkeys,
             )?
         }
     }

@@ -3,22 +3,16 @@
 
 //! Tests for multi-agent transactions.
 
-use diem_types::{
-    account_config::{self, ReceivedPaymentEvent, SentPaymentEvent},
-    on_chain_config::VMPublishingOption,
-    transaction::{
-        Script, SignedTransaction, TransactionArgument, TransactionOutput, TransactionStatus,
-    },
-    vm_status::{known_locations, KeptVMStatus},
-};
+use diem_types::{account_config, transaction::TransactionStatus, vm_status::KeptVMStatus};
 use language_e2e_tests::{
     account::{self, xdx_currency_code, xus_currency_code, Account},
     common_transactions::{multi_agent_mint_txn, multi_agent_swap_txn},
     current_function_name,
     executor::FakeExecutor,
-    transaction_status_eq,
 };
 use transaction_builder::*;
+use diem_types::test_helpers::transaction_test_helpers;
+use language_e2e_tests::common_transactions::multi_agent_swap_script;
 
 #[test]
 fn multi_agent_mint() {
@@ -158,4 +152,34 @@ fn multi_agent_swap() {
     assert_eq!(1, updated_sender.sent_events().count());
     assert_eq!(1, updated_secondary_signer.received_events().count());
     assert_eq!(1, updated_secondary_signer.sent_events().count());
+}
+
+#[test]
+fn multi_agent_wrong_number_of_signers() {
+    let mut executor = FakeExecutor::from_genesis_file();
+    executor.set_golden_file(current_function_name!());
+    let sender = executor.create_raw_account_data(1_000_010, 10);
+    let secondary_signer = executor.create_raw_account_data(100_100, 100);
+    let third_signer = executor.create_raw_account_data(100_100, 100);
+
+    executor.add_account_data(&sender);
+    executor.add_account_data(&secondary_signer);
+    executor.add_account_data(&third_signer);
+
+    // Number of secondary signers given is 2 but the script only allows one secondary signer.
+    let signed_txn = transaction_test_helpers::get_test_unchecked_multi_agent_txn(
+        *sender.address(),
+        vec![*secondary_signer.address(), *third_signer.address()],
+        10,
+        &sender.account().privkey,
+        sender.account().pubkey.clone(),
+        vec![&secondary_signer.account().privkey, &third_signer.account().privkey],
+        vec![secondary_signer.account().pubkey.clone(), third_signer.account().pubkey.clone()],
+        Some(multi_agent_swap_script(10, 0)), // swap between two accounts
+    );
+    let output = executor.execute_transaction(signed_txn);
+    assert_eq!(
+        output.status(),
+        &TransactionStatus::Keep(KeptVMStatus::MiscellaneousError)
+    );
 }

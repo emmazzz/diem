@@ -988,6 +988,28 @@ reconfiguration event.
 
 </details>
 
+<details>
+<summary>Specification</summary>
+
+
+
+<a name="0x1_DiemConfig_config$24"></a>
+
+
+<pre><code><b>let</b> config = <b>global</b>&lt;<a href="DiemConfig.md#0x1_DiemConfig_Configuration">Configuration</a>&gt;(<a href="CoreAddresses.md#0x1_CoreAddresses_DIEM_ROOT_ADDRESS">CoreAddresses::DIEM_ROOT_ADDRESS</a>());
+<a name="0x1_DiemConfig_handle$25"></a>
+<b>let</b> handle = config.events;
+<a name="0x1_DiemConfig_msg$26"></a>
+<b>let</b> msg = <a href="DiemConfig.md#0x1_DiemConfig_NewEpochEvent">NewEpochEvent</a> {
+        epoch: config.epoch,
+};
+emits msg <b>to</b> handle;
+</code></pre>
+
+
+
+</details>
+
 <a name="@Module_Specification_1"></a>
 
 ## Module Specification
